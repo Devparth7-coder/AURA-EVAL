@@ -1,9 +1,104 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "//": "Root manifest for a SINGLE-PROJECT deploy of the Next.js frontend. The FastAPI backend deploys as its own Vercel project from ./backend (see backend/vercel.json and README §Deploying to Vercel). Two projects are recommended: independent scaling, independent rollback.",
-  "framework": "nextjs",
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/.next",
-  "installCommand": "echo 'install handled in buildCommand'",
+  "version": 2,
+
+  "//": [
+    "AURA-EVAL — SINGLE-PROJECT, MULTI-SERVICE Vercel deployment.",
+    "",
+    "Two services are built from this one repository and served on ONE domain:",
+    "  1. @vercel/python -> api/index.py     (FastAPI, re-exported from backend/)",
+    "  2. @vercel/next   -> frontend/         (Next.js 14 App Router)",
+    "",
+    "Routing: /api/* is handled by the Python lambda; everything else falls",
+    "through to the Next.js build. Because both share an origin, the browser",
+    "uses relative URLs, NEXT_PUBLIC_API_URL can be left empty, and CORS is a",
+    "non-issue.",
+    "",
+    "Constraints encoded here on purpose:",
+    "  * `functions` may NOT be combined with `builds` — per-lambda memory and",
+    "    maxDuration therefore live in builds[].config.",
+    "  * top-level `headers` may NOT be combined with `routes` — security",
+    "    headers are therefore attached to the catch-all route below.",
+    "",
+    "Prefer this manifest for a one-click deploy. For independent scaling and",
+    "independent rollback per service, use the TWO-PROJECT layout instead",
+    "(frontend/vercel.json + backend/vercel.json) — see README section 16."
+  ],
+
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.12",
+        "maxLambdaSize": "45mb",
+        "memory": 1024,
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
+    }
+  ],
+
+  "routes": [
+    {
+      "src": "/api/health(?:/.*)?",
+      "dest": "/api/index.py",
+      "headers": { "Cache-Control": "no-store, max-age=0" }
+    },
+    {
+      "src": "/api/runs/[^/]+/stream",
+      "dest": "/api/index.py",
+      "headers": {
+        "Cache-Control": "no-store, no-transform",
+        "Content-Type": "text/event-stream",
+        "X-Accel-Buffering": "no"
+      }
+    },
+    {
+      "src": "/api/(?:.*)",
+      "dest": "/api/index.py"
+    },
+
+    {
+      "//": "FastAPI serves its docs under /api/* (docs_url='/api/docs'). These are convenience redirects so the bare paths resolve instead of falling through to the Next.js 404.",
+      "src": "/docs",
+      "status": 308,
+      "headers": { "Location": "/api/docs" }
+    },
+    {
+      "src": "/redoc",
+      "status": 308,
+      "headers": { "Location": "/api/redoc" }
+    },
+    {
+      "src": "/openapi.json",
+      "status": 308,
+      "headers": { "Location": "/api/openapi.json" }
+    },
+
+    { "handle": "filesystem" },
+
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/$1",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+      }
+    }
+  ],
+
+  "crons": [
+    {
+      "path": "/api/internal/tick",
+      "schedule": "*/1 * * * *"
+    }
+  ],
+
   "github": { "silent": true }
 }
