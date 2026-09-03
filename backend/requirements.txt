@@ -1,3 +1,14 @@
+# AURA-EVAL backend — core runtime dependencies.
+#
+# Kept deliberately lean so this file can be installed directly by
+# @vercel/python in the two-project deploy (Root Directory = backend) without
+# exceeding the 250 MB unzipped lambda limit.
+#
+# Heavy, strictly-optional extras (Parquet export, Redis queue) live in
+# requirements-optional.txt and degrade gracefully when absent:
+#   * no pyarrow -> Parquet export is disabled; JSON/JSONL/CSV still work
+#   * no redis   -> TaskQueue falls back to the inline/QStash provider
+
 # --- core -------------------------------------------------------------
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
@@ -14,7 +25,3 @@ langchain-core==0.3.29
 SQLAlchemy==2.0.36
 alembic==1.14.0
 psycopg[binary]==3.2.3
-
-# --- optional infrastructure (graceful fallbacks exist for all) -------
-redis==5.2.1
-pyarrow==18.1.0
