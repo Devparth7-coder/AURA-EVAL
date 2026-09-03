@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "45mb", "runtime": "python3.12" }
+    }
+  ],
+  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }],
+  "functions": {
+    "api/index.py": { "memory": 1024, "maxDuration": 60 }
+  },
+  "crons": [{ "path": "/api/internal/tick", "schedule": "*/1 * * * *" }]
+}

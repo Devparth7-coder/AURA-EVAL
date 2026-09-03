@@ -1,0 +1,45 @@
+[project]
+name = "aura-eval-backend"
+version = "1.0.0"
+description = "AURA-EVAL — autonomous multi-agent evaluation & dataset generation platform (API)"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+exclude = ["alembic/versions", ".venv", "__pycache__", "_storage"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "BLE", "ASYNC"]
+ignore = [
+  "E501",     # line length is handled by the formatter
+  "B008",     # FastAPI's Depends()/Header() defaults are idiomatic
+  "RUF012",   # ClassVar annotations on SQLAlchemy/registry dicts add noise
+  "RUF046",   # int() casts kept for explicitness on score arithmetic
+  "SIM105",
+  "N818",
+  "ASYNC109", # explicit timeout params are part of the provider contract
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017", "C405", "F841", "BLE001", "N806"]
+"app/api/internal.py" = ["BLE001"]   # one bad run must never break the cron tick
+"app/workflows/executor.py" = ["BLE001"]
+"app/agents/*" = ["BLE001"]
+"app/services/*" = ["BLE001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_redundant_casts = true
+warn_unused_ignores = false
+disallow_untyped_defs = false
+check_untyped_defs = true
+exclude = "(alembic|tests|_storage)/"

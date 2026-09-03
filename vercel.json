@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "//": "Root manifest for a SINGLE-PROJECT deploy of the Next.js frontend. The FastAPI backend deploys as its own Vercel project from ./backend (see backend/vercel.json and README §Deploying to Vercel). Two projects are recommended: independent scaling, independent rollback.",
+  "framework": "nextjs",
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/.next",
+  "installCommand": "echo 'install handled in buildCommand'",
+  "github": { "silent": true }
+}

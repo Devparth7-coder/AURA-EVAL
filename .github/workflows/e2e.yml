@@ -1,0 +1,47 @@
+name: E2E acceptance
+
+on:
+  schedule: [{ cron: "0 3 * * 1" }]
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    name: Project → SOP → run → dataset → JSONL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aura
+          POSTGRES_PASSWORD: aura
+          POSTGRES_DB: aura_eval
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aura" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      ENVIRONMENT: development
+      LLM_PROVIDER: mock
+      DATABASE_URL: postgresql+psycopg://aura:aura@localhost:5432/aura_eval
+      STORAGE_PROVIDER: local
+      JWT_SECRET: ci-secret
+      CORS_ORIGINS: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install
+        working-directory: backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Migrate
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Start API
+        working-directory: backend
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 40); do curl -fsS http://localhost:8000/api/health && break; sleep 2; done
+      - name: Full acceptance flow
+        run: bash scripts/acceptance.sh
