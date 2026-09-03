@@ -55,8 +55,17 @@ services:
     autoDeploy: true
 
     envVars:
+      # Pin the exact interpreter. Render defaults to a newer Python (3.14 at
+      # time of writing) when this is absent or too loose, and pydantic-core
+      # 2.27.2 publishes no cp314 wheel — pip then tries to build it from Rust
+      # source and fails on the read-only cargo cache:
+      #   error: failed to create directory `/usr/local/cargo/registry/cache/...`
+      #   Read-only file system (os error 30)  ->  💥 maturin failed
+      # A patch-level version is required; "3.12" alone is not always honoured.
+      # The root .python-version file pins this too (Render reads it from the
+      # REPOSITORY ROOT, not from rootDir).
       - key: PYTHON_VERSION
-        value: "3.12"
+        value: "3.12.8"
 
       - key: ENVIRONMENT
         value: production
