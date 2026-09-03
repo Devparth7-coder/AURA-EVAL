@@ -2,7 +2,28 @@
 name = "aura-eval-backend"
 version = "1.0.0"
 description = "AURA-EVAL — autonomous multi-agent evaluation & dataset generation platform (API)"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"  # pydantic-core 2.27.2 has no cp314 wheel
+# Runtime dependencies are declared in requirements.txt, which Vercel's Python
+# runtime installs. They are mirrored here so that tooling which reads
+# pyproject.toml (and Vercel's FastAPI framework detection) sees them too.
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "pydantic==2.10.5",
+    "pydantic-settings==2.7.1",
+    "python-dotenv==1.0.1",
+    "httpx==0.28.1",
+    "langgraph==0.2.62",
+    "langchain-core==0.3.29",
+    "SQLAlchemy==2.0.36",
+    "alembic==1.14.0",
+    "psycopg[binary]==3.2.3",
+]
+
+[tool.vercel]
+# Explicit ASGI entrypoint for the Vercel Python runtime. Matches the
+# `entrypoint` declared for the "api" service in the root vercel.json.
+entrypoint = "app.main:app"
 
 [tool.ruff]
 line-length = 100
