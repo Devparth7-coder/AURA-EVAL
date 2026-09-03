@@ -1,16 +1,58 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+
+  "//": [
+    "AURA-EVAL backend — TWO-PROJECT deploy.",
+    "Set the Vercel project's Root Directory to `backend`. The frontend is a",
+    "separate project rooted at `frontend` (see frontend/vercel.json).",
+    "",
+    "Note: `functions` cannot be combined with `builds`, so memory and",
+    "maxDuration are declared inside builds[].config.",
+    "",
+    "With this layout the two services are on different origins, so the",
+    "frontend must set NEXT_PUBLIC_API_URL and this project must set",
+    "CORS_ORIGINS to the frontend URL. The single-project manifest at the",
+    "repo root avoids both by sharing one origin."
+  ],
+
   "builds": [
     {
       "src": "api/index.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "45mb", "runtime": "python3.12" }
+      "config": {
+        "runtime": "python3.12",
+        "maxLambdaSize": "45mb",
+        "memory": 1024,
+        "maxDuration": 60
+      }
     }
   ],
-  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }],
-  "functions": {
-    "api/index.py": { "memory": 1024, "maxDuration": 60 }
-  },
-  "crons": [{ "path": "/api/internal/tick", "schedule": "*/1 * * * *" }]
+
+  "routes": [
+    {
+      "src": "/api/health(?:/.*)?",
+      "dest": "api/index.py",
+      "headers": { "Cache-Control": "no-store, max-age=0" }
+    },
+    {
+      "src": "/api/runs/[^/]+/stream",
+      "dest": "api/index.py",
+      "headers": {
+        "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+
+  "crons": [
+    {
+      "path": "/api/internal/tick",
+      "schedule": "*/1 * * * *"
+    }
+  ]
 }
