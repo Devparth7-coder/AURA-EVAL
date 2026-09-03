@@ -1,0 +1,153 @@
+# ============================================================================
+# AURA-EVAL — Render Blueprint (Infrastructure as Code)
+#
+#   Render dashboard → New → Blueprint → point at this repository.
+#   Everything below is provisioned in one shot: Postgres, the FastAPI API,
+#   and the Next.js frontend.
+#
+# Why Render for the API instead of Vercel:
+#   Workflow runs are long-lived multi-agent executions. On Vercel they must be
+#   sliced across function invocations and driven by a per-minute cron tick —
+#   and Vercel's Hobby plan caps cron jobs at ONE PER DAY, which makes that
+#   model unusable without upgrading to Pro.
+#
+#   Render runs a persistent process, so the API executes a run to completion
+#   in a FastAPI BackgroundTask. No cron, no slicing, no plan limit. The
+#   /api/runs/{id}/advance endpoint still exists and still works — it is simply
+#   no longer required to make progress.
+#
+# The frontend can stay on Vercel if you prefer its CDN; see README section 16.
+# ============================================================================
+
+databases:
+  - name: aura-eval-db
+    databaseName: aura_eval
+    user: aura
+    plan: free # 90-day expiry on free; upgrade to `basic-256mb` to persist
+    postgresMajorVersion: "16"
+
+services:
+  # --------------------------------------------------------------------------
+  # FastAPI backend — persistent web service
+  # --------------------------------------------------------------------------
+  - type: web
+    name: aura-eval-api
+    runtime: python
+    plan: free # free instances sleep after 15 min idle; `starter` avoids that
+    rootDir: backend
+    region: oregon
+    branch: main
+    healthCheckPath: /api/health
+
+    buildCommand: "pip install --upgrade pip && pip install -r requirements-optional.txt && alembic upgrade head"
+    # requirements-optional.txt = core + pyarrow/pandas/redis. There is no
+    # serverless bundle-size limit here, so Parquet export is available.
+    #
+    # Migrations run in the build step: Render keeps the previous version live
+    # until the new one passes its health check, so this is a safe place for
+    # them and avoids a race between multiple booting instances.
+
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"
+    # --workers 1 is deliberate: BackgroundTasks run in the worker process, and
+    # a second worker would not see them. Scale with Render instances (each
+    # gets its own runs) rather than with uvicorn workers.
+
+    autoDeploy: true
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+
+      - key: ENVIRONMENT
+        value: production
+
+      # CRITICAL: Render is a persistent host, not a serverless platform.
+      # Leaving this false keeps SQLAlchemy pooling enabled and keeps
+      # STORAGE_PROVIDER=local writing to the real disk mounted below.
+      - key: SERVERLESS
+        value: "false"
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aura-eval-db
+          property: connectionString
+
+      - key: LLM_PROVIDER
+        value: mock # deterministic; the whole app works with no API key
+      - key: DEFAULT_MODEL
+        value: mock-1
+
+      # Set these in the Render dashboard only if you switch LLM_PROVIDER.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: STORAGE_PROVIDER
+        value: local
+      - key: STORAGE_DIR
+        value: /var/data/storage # the persistent disk mount below
+
+      - key: TASK_QUEUE_PROVIDER
+        value: inline # in-process background execution; no external queue
+
+      - key: AUTH_ENABLED
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true # Render generates a strong secret
+
+      # Set to the deployed frontend origin. Never "*".
+      - key: CORS_ORIGINS
+        sync: false
+
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+
+    # Dataset artifacts survive restarts and deploys. Requires a paid instance;
+    # on the free plan drop this block and use STORAGE_PROVIDER=s3 or blob.
+    disk:
+      name: aura-storage
+      mountPath: /var/data
+      sizeGB: 1
+
+  # --------------------------------------------------------------------------
+  # Next.js frontend
+  # --------------------------------------------------------------------------
+  - type: web
+    name: aura-eval-web
+    runtime: node
+    plan: free
+    rootDir: frontend
+    region: oregon
+    branch: main
+
+    # next.config.mjs sets output:'standalone', so `next start` does NOT work
+    # (Next prints: '"next start" does not work with "output: standalone"').
+    # The standalone bundle ships its own minimal server + node_modules, but
+    # Next does not copy static assets into it — they must be moved in.
+    buildCommand: "npm ci && npm run build && cp -r .next/static .next/standalone/.next/static && (cp -r public .next/standalone/public 2>/dev/null || true)"
+    startCommand: "node .next/standalone/server.js"
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      # HOSTNAME/PORT are what the standalone server.js binds to.
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      # Public API origin, inlined at BUILD time by Next.js. After changing it
+      # you must redeploy (not just restart) the frontend.
+      # `host` yields e.g. aura-eval-api.onrender.com, so add the scheme.
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: aura-eval-api
+          envVarKey: RENDER_EXTERNAL_URL
